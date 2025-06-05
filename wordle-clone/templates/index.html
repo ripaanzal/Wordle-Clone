@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Wordle Clone</title>
+  <style>
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: #121213;
+      color: #fff;
+      text-align: center;
+      margin: 0;
+      padding: 2rem;
+      user-select: none;
+    }
+    h1 {
+      margin-bottom: 1rem;
+    }
+    .grid {
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      max-width: 340px;
+      margin: 0 auto 1rem auto;
+    }
+    .row {
+      display: flex;
+      gap: 8px;
+      justify-content: center;
+    }
+    .cell {
+      width: 60px;
+      height: 60px;
+      border: 2px solid #3a3a3c;
+      font-size: 2.5rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background-color: #121213;
+      color: #fff;
+      border-radius: 4px;
+      transition: background-color 0.5s, border-color 0.5s;
+    }
+    .flip {
+      animation: flip 0.6s forwards;
+    }
+    @keyframes flip {
+      0% { transform: rotateX(0deg); }
+      50% { transform: rotateX(90deg); }
+      100% { transform: rotateX(0deg); }
+    }
+    .green {
+      background-color: #538d4e;
+      border-color: #538d4e;
+      color: white;
+    }
+    .yellow {
+      background-color: #b59f3b;
+      border-color: #b59f3b;
+      color: white;
+    }
+    .gray {
+      background-color: #3a3a3c;
+      border-color: #3a3a3c;
+      color: white;
+    }
+    .message {
+      font-size: 1.2rem;
+      margin: 1rem 0;
+      height: 1.5rem;
+    }
+    .keyboard {
+      max-width: 600px;
+      margin: 0 auto;
+      user-select: none;
+    }
+    .keyboard-row {
+      display: flex;
+      justify-content: center;
+      gap: 8px;
+      margin-bottom: 8px;
+    }
+    .key {
+      background: #818384;
+      border: none;
+      border-radius: 4px;
+      padding: 12px 16px;
+      color: white;
+      font-weight: 700;
+      font-size: 1rem;
+      cursor: pointer;
+      text-transform: uppercase;
+      user-select: none;
+      transition: background-color 0.3s;
+    }
+    .key:hover {
+      background: #a4a6a8;
+    }
+  </style>
+</head>
+<body>
+  <h1>Wordle Clone</h1>
+
+  <div class="grid" id="grid"></div>
+  <div class="message" id="message"></div>
+
+  <div class="keyboard" id="keyboard"></div>
+
+  <script>
+    const maxGuesses = 5;
+    const targetWord = "{{ target_word }}".toLowerCase();
+
+    let currentGuess = "";
+    let rowCount = 0;
+
+    const grid = document.getElementById("grid");
+    const message = document.getElementById("message");
+    const keyboard = document.getElementById("keyboard");
+
+    const keyboardLayout = [
+      ["Q", "W", "E", "R", "T", "Y", "U", "I", "O", "P"],
+      ["A", "S", "D", "F", "G", "H", "J", "K", "L"],
+      ["Enter", "Z", "X", "C", "V", "B", "N", "M", "←"]
+    ];
+
+    // Initialize grid rows
+    for (let i = 0; i < maxGuesses; i++) {
+      createRow(i);
+    }
+
+    // Build keyboard
+    keyboardLayout.forEach(row => {
+      const rowDiv = document.createElement("div");
+      rowDiv.className = "keyboard-row";
+      row.forEach(key => {
+        const keyBtn = document.createElement("button");
+        keyBtn.textContent = key;
+        keyBtn.className = "key";
+        keyBtn.onclick = () => handleKey(key);
+        rowDiv.appendChild(keyBtn);
+      });
+      keyboard.appendChild(rowDiv);
+    });
+
+    function createRow(index) {
+      const row = document.createElement("div");
+      row.className = `row row-${index}`;
+      for (let i = 0; i < 5; i++) {
+        const cell = document.createElement("div");
+        cell.className = "cell";
+        row.appendChild(cell);
+      }
+      grid.appendChild(row);
+    }
+
+    function handleKey(key) {
+      if (rowCount >= maxGuesses) return; // No input after game over
+
+      if (key === "Enter") {
+        if (currentGuess.length === 5) {
+          submitGuess();
+        }
+      } else if (key === "←") {
+        currentGuess = currentGuess.slice(0, -1);
+        updateRow();
+      } else if (currentGuess.length < 5 && key.length === 1 && /[a-zA-Z]/.test(key)) {
+        currentGuess += key.toLowerCase();
+        updateRow();
+      }
+    }
+
+    function updateRow() {
+      const row = document.querySelector(`.row-${rowCount}`);
+      if (!row) return;
+      [...row.children].forEach((cell, i) => {
+        cell.textContent = currentGuess[i]?.toUpperCase() || "";
+      });
+    }
+
+    function submitGuess() {
+     fetch("/check", {
+     method: "POST",
+     headers: { "Content-Type": "application/json" },
+     body: JSON.stringify({ guess: currentGuess, target_word: targetWord })
+    })
+
+      .then(res => {
+        if (!res.ok) throw new Error("Invalid guess");
+        return res.json();
+      })
+      .then(data => {
+        const row = document.querySelector(`.row-${rowCount}`);
+        data.feedback.forEach((color, i) => {
+          const cell = row.children[i];
+          cell.classList.add("flip");
+          setTimeout(() => cell.classList.add(color), 300 * i);
+        });
+
+        if (data.win) {
+          message.textContent = "🎉 You guessed it!";
+          rowCount = maxGuesses; // Stop input
+        } else {
+          rowCount++;
+          if (rowCount === maxGuesses) {
+            message.textContent = `❌ Try Again! The word was: ${targetWord.toUpperCase()}`;
+          }
+        }
+        currentGuess = "";
+      })
+      .catch(() => {
+        message.textContent = "Not a valid word.";
+      });
+    }
+
+    // Optional: allow physical keyboard input
+    window.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") handleKey("Enter");
+      else if (e.key === "Backspace") handleKey("←");
+      else if (/^[a-zA-Z]$/.test(e.key)) handleKey(e.key.toUpperCase());
+    });
+  </script>
+</body>
+</html>
